@@ -5,6 +5,8 @@ import (
 	"unique"
 )
 
+// ============
+
 const (
 	pfxSize        = 24
 	codeSize       = 2
@@ -23,6 +25,12 @@ const (
 	IPv4
 	IPv6
 )
+
+// ============
+type Container interface {
+	Contains(ip netip.Addr) bool
+	ContainsPrefix(p netip.Prefix) bool
+}
 
 // ============
 

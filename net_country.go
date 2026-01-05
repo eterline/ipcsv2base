@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/netip"
 	"os"
+
+	"go4.org/netipx"
 )
 
 type NetworkCountryWriter struct {
@@ -55,6 +57,19 @@ func (w *NetworkCountryWriter) Write(n NetworkCountry) error {
 	return err
 }
 
+func (w *NetworkCountryWriter) Save() error {
+	if w.w != nil {
+		if err := w.w.Close(); err != nil {
+			_ = w.f.Close()
+			return err
+		}
+	}
+	if w.f != nil {
+		return w.f.Close()
+	}
+	return nil
+}
+
 func (w *NetworkCountryWriter) Close() error {
 	if w.w != nil {
 		if err := w.w.Close(); err != nil {
@@ -86,20 +101,21 @@ type NetworkCountryReader struct {
 	f       *os.File
 	r       io.ReadCloser
 	buf     [26]byte
-	codes   map[string]struct{}
+	codes   map[uint16]struct{}
 	testVer func(netip.Addr) bool
 }
 
 func OpenNetworkCountryBase(path string, ver NetworkVersion, codes ...string) (*NetworkCountryReader, error) {
 
-	var codesMap map[string]struct{}
+	var codesMap map[uint16]struct{}
 
 	if len(codes) > 0 {
-		codesMap = make(map[string]struct{})
+		codesMap = make(map[uint16]struct{})
 		for _, code := range codes {
 			if len(code) != codeSize {
 				return nil, fmt.Errorf("invalid country code: %s", code)
 			}
+			code := codeToUint16LE([]byte(code)[0], []byte(code)[1])
 			codesMap[code] = struct{}{}
 		}
 	} else {
@@ -127,20 +143,20 @@ func OpenNetworkCountryBase(path string, ver NetworkVersion, codes ...string) (*
 }
 
 func (r *NetworkCountryReader) Next() (NetworkCountry, error) {
-
 	for {
 		_, err := io.ReadFull(r.r, r.buf[:])
 		if err != nil {
 			return NetworkCountry{}, err
 		}
 
-		code := string(r.buf[24:26])
-
 		if r.codes != nil {
+			code := codeToUint16LE(r.buf[24], r.buf[25])
 			if _, ok := r.codes[code]; !ok {
 				continue
 			}
 		}
+
+		code := string(r.buf[24:26])
 
 		var tmp [24]byte
 		copy(tmp[:], r.buf[:24])
@@ -176,15 +192,33 @@ func (r *NetworkCountryReader) All() ([]NetworkCountry, error) {
 	return nets, nil
 }
 
-func (w *NetworkCountryReader) Close() error {
-	if w.r != nil {
-		if err := w.r.Close(); err != nil {
-			_ = w.f.Close()
+func (r *NetworkCountryReader) Close() error {
+	if r.r != nil {
+		if err := r.r.Close(); err != nil {
+			_ = r.f.Close()
 			return err
 		}
 	}
-	if w.f != nil {
-		return w.f.Close()
+	if r.f != nil {
+		return r.f.Close()
 	}
 	return nil
+}
+
+func (r *NetworkCountryReader) Container() (Container, error) {
+	setBuild := &netipx.IPSetBuilder{}
+
+	for {
+		rec, err := r.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+
+		setBuild.AddPrefix(rec.Network())
+	}
+
+	return setBuild.IPSet()
 }

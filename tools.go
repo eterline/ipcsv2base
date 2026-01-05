@@ -15,6 +15,10 @@ func upperByte(b byte) byte {
 	return b
 }
 
+func codeToUint16LE(b0, b1 byte) uint16 {
+	return uint16(b1)<<8 | uint16(b0)
+}
+
 func resolveCsvFields(r io.Reader, fields ...string) ([]int, error) {
 	csvR := csv.NewReader(r)
 
