@@ -1,0 +1,31 @@
+version: '3'
+
+# ============== Variables ==============
+vars:
+  # Go build flags with embedded version info
+  GO_FLAGS: "-s -w"
+
+# ============== Tasks ==============
+tasks:
+
+  # Clean Go environment
+  clean:
+    desc: "Clean Go modules and build artifacts"
+    silent: true
+    cmds:
+      - echo "=== Cleaning Go Environment ==="
+      - go mod tidy
+      - go clean
+      - echo "=== Clean Completed ==="
+
+  # Build binary
+  build:
+    desc: "Build binary"
+    silent: true
+    cmds:
+      - echo "=== Building Binary ==="
+      - |
+        go build -trimpath -ldflags="{{.GO_FLAGS}}" \
+        -o "./ipcsv2base.exe" \
+        -v "./cmd/..."
+      - echo "=== Build Completed ==="
