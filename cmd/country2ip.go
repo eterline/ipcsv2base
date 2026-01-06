@@ -12,12 +12,43 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type IPVersion string
+
+const (
+	IPv4 IPVersion = "ipv4"
+	IPv6 IPVersion = "ipv6"
+	All  IPVersion = "all"
+)
+
+func (v *IPVersion) Set(s string) error {
+	switch s {
+	case "ipv4", "IPv4":
+		*v = IPv4
+	case "ipv6", "IPv6":
+		*v = IPv6
+	case "all", "ALL":
+		*v = All
+	default:
+		return fmt.Errorf("invalid version %q, must be one of: ipv4, ipv6, all", s)
+	}
+	return nil
+}
+
+func (v *IPVersion) Type() string {
+	return "ipversion"
+}
+
+func (v *IPVersion) String() string {
+	return string(*v)
+}
+
 func init() {
 	rootCmd.AddCommand(country2ipCmd)
 	country2ipCmd.PersistentFlags().StringP("input", "i", "ip-to-country.csv", "CSV file")
 	country2ipCmd.PersistentFlags().StringP("output", "o", "country2ip.bin", "Output directory")
 	country2ipCmd.PersistentFlags().BoolP("read", "r", false, "Testing reading base")
 	country2ipCmd.PersistentFlags().StringSliceP("codes", "c", []string{}, "Testing reading codes to read")
+	country2ipCmd.PersistentFlags().StringP("version", "v", "all", "Testing reading IP version")
 }
 
 var country2ipCmd = &cobra.Command{
@@ -30,8 +61,10 @@ var country2ipCmd = &cobra.Command{
 
 		read, _ := cmd.Flags().GetBool("read")
 		if read {
+			ipVer, _ := cmd.Flags().GetString("version")
 			codes, _ := cmd.Flags().GetStringSlice("codes")
-			if err := readCountryBase(input, codes); err != nil {
+
+			if err := readCountryBase(input, ipVer, codes); err != nil {
 				log.Fatal(err)
 			}
 			return
@@ -63,10 +96,10 @@ var country2ipCmd = &cobra.Command{
 	},
 }
 
-func readCountryBase(path string, codes []string) error {
+func readCountryBase(path, ipver string, codes []string) error {
 	log.Printf("[INIT] Opening country base: %s", path)
 
-	base, err := ipcsv2base.OpenNetworkCountryBase(path, ipcsv2base.IPv6, codes...)
+	base, err := ipcsv2base.OpenNetworkCountryBase(path, parseIpVer(ipver), codes...)
 	if err != nil {
 		return fmt.Errorf(
 			"[ERROR] Failed to open country base %q: %w",
@@ -95,8 +128,8 @@ func readCountryBase(path string, codes []string) error {
 		log.Printf(
 			"[REC %d] %s - %s",
 			i,
-			rec.Code(),
-			rec.Network(),
+			rec.Country(),
+			rec.Prefix(),
 		)
 	}
 
@@ -136,7 +169,6 @@ func processCSVToCountryBase(src *os.File, base *ipcsv2base.NetworkCountryWriter
 	log.Println("[INFO] CSV reader initialized")
 	log.Println("[INFO] Skipping CSV header")
 
-	// skip header
 	if _, err := rd.Read(); err != nil {
 		return fmt.Errorf(
 			"[ERROR] Failed to read CSV header: %w",
@@ -172,7 +204,7 @@ func processCSVToCountryBase(src *os.File, base *ipcsv2base.NetworkCountryWriter
 		}
 
 		entry := ipcsv2base.NewNetworkCountry(pfx, code)
-		if err := base.Write(entry); err != nil {
+		if _, err := base.Write(entry); err != nil {
 			return fmt.Errorf(
 				"[ERROR] Failed to write record %d: %w",
 				processed, err,
@@ -187,4 +219,14 @@ func processCSVToCountryBase(src *os.File, base *ipcsv2base.NetworkCountryWriter
 
 	log.Printf("[END] CSV processing finished, total records: %d, base size: %dB", processed, base.Size())
 	return nil
+}
+
+func parseIpVer(ipver string) ipcsv2base.NetworkVersion {
+	if ipver == "v4" {
+		return ipcsv2base.IPv4
+	}
+	if ipver == "v6" {
+		return ipcsv2base.IPv6
+	}
+	return ipcsv2base.IPv4IPv6
 }

@@ -51,10 +51,23 @@ func PrefixToVec24(p netip.Prefix) ([24]byte, error) {
 		return out, fmt.Errorf("invalid prefix")
 	}
 
-	addr := p.Addr()
-
-	slice16 := addr.As16()
-	copy(out[0:16], slice16[:])
+	addr := p.Addr().As16()
+	out[0] = addr[0]
+	out[1] = addr[1]
+	out[2] = addr[2]
+	out[3] = addr[3]
+	out[4] = addr[4]
+	out[5] = addr[5]
+	out[6] = addr[6]
+	out[7] = addr[7]
+	out[8] = addr[8]
+	out[9] = addr[9]
+	out[10] = addr[10]
+	out[11] = addr[11]
+	out[12] = addr[12]
+	out[13] = addr[13]
+	out[14] = addr[14]
+	out[15] = addr[15]
 
 	binary.LittleEndian.PutUint32(out[16:20], uint32(p.Bits()))
 
