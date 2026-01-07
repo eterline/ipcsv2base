@@ -71,7 +71,8 @@ func (h *BaseAPIHandlerGroup) extractIP(r *http.Request) (netip.Addr, error) {
 // Parsing errors are returned to the client.
 // Internal lookup errors are logged and hidden.
 func (h *BaseAPIHandlerGroup) LookupIPHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
 
 	startAt := time.Now()
 
@@ -113,11 +114,10 @@ func (h *BaseAPIHandlerGroup) LookupIPHandler(w http.ResponseWriter, r *http.Req
 //
 // Parsing errors are returned to the client.
 // Internal lookup errors are logged and hidden.
-func (h *BaseAPIHandlerGroup) LookupSubnetHandler(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	ctx := r.Context()
+func (h *BaseAPIHandlerGroup) LookupSubnetHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
 	rawNet := chi.URLParam(r, "net")
 	log := h.log.With("prefix", rawNet)
 
@@ -149,4 +149,20 @@ func (h *BaseAPIHandlerGroup) LookupSubnetHandler(
 		SetCode(http.StatusOK).
 		WrapData(dto).
 		Write(w)
+}
+
+func (h *BaseAPIHandlerGroup) AvailableTypes() func(w http.ResponseWriter, r *http.Request) {
+	types := map[string]string{
+		model.NetworkGlobal.String():   "Global public IP address, reachable from the Internet (RFC 791). Example: 8.8.8.8",
+		model.NetworkPrivate.String():  "Private IP address, used inside local networks, not routed on the Internet (RFC 1918). Examples: 192.168.0.0/16, 10.0.0.0/8",
+		model.NetworkLoopback.String(): "Loopback address for self-communication, used for testing local services (RFC 1122). Examples: 127.0.0.1, ::1",
+		model.NetworkTest.String():     "Test/documentation addresses reserved for examples/testing, not routable in production (RFC 5737). Examples: 192.0.2.0/24, 198.51.100.0/24",
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		api.NewResponse().
+			SetCode(http.StatusOK).
+			WrapData(types).
+			Write(w)
+	}
 }

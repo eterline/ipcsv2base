@@ -5,6 +5,10 @@
 package main
 
 import (
+	"net/http"
+
+	_ "net/http/pprof"
+
 	"github.com/eterline/ipcsv2base/internal/app/ipcsv2base"
 	"github.com/eterline/ipcsv2base/internal/config"
 	"github.com/eterline/ipcsv2base/internal/infra/log"
@@ -25,6 +29,7 @@ var (
 	}
 
 	cfg = config.Configuration{
+		Profiling: "",
 		Log: config.Log{
 			LogLevel:      "info",
 			JSONlog:       false,
@@ -34,6 +39,10 @@ var (
 			Listen:     ":3000",
 			CrtFileSSL: "",
 			KeyFileSSL: "",
+		},
+		Base: config.Base{
+			CountryCSV: "ip-to-country.csv",
+			AsnCSV:     "ip-to-asn.csv",
 		},
 	}
 )
@@ -47,6 +56,13 @@ func main() {
 
 	logger := log.NewLogger(cfg.LogLevel, cfg.JSONlog)
 	root.Context = log.WrapLoggerToContext(root.Context, logger)
+
+	if cfg.Profiling != "" {
+		go func() {
+			logger.Info("pprof listening", "listen", cfg.Profiling)
+			http.ListenAndServe(cfg.Profiling, nil)
+		}()
+	}
 
 	ipcsv2base.Execute(root, Flags, cfg)
 }

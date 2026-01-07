@@ -20,13 +20,20 @@ type (
 
 	Server struct {
 		Listen     string `arg:"--listen,-l" help:"Server listen address"`
-		CrtFileSSL string `arg:"--certfile,-c" help:"Server SSL certificate file"`
-		KeyFileSSL string `arg:"--keyfile,-k" help:"Server SSL key file"`
+		CrtFileSSL string `arg:"--ssl-cert,-c" help:"Server SSL certificate file"`
+		KeyFileSSL string `arg:"--ssl-key,-k" help:"Server SSL key file"`
+	}
+
+	Base struct {
+		CountryCSV string `arg:"--country-csv" help:"Path to the country CSV file"`
+		AsnCSV     string `arg:"--asn-csv" help:"Path to the ASN CSV file"`
 	}
 
 	Configuration struct {
+		Profiling string `arg:"--prof-listen" help:"pprof server listen address"`
 		Log
 		Server
+		Base
 	}
 )
 
