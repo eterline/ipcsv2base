@@ -1,0 +1,67 @@
+package model
+
+import (
+	"errors"
+	"net/netip"
+)
+
+type GeoCode string
+
+func NewGeoCode(c string) (GeoCode, error) {
+	if len(c) != 2 {
+		return "", errors.New("invalid geo code")
+	}
+	return GeoCode(c), nil
+}
+
+func (gc GeoCode) String() string {
+	return string(gc)
+}
+
+type NetworkType uint8
+
+const (
+	NetworkUnknown  NetworkType = iota
+	NetworkLoopback             // Loopback
+	NetworkGlobal               // WAN
+	NetworkPrivate              // private / RFC1918 / ULA
+	NetworkTest                 // test / documentation / benchmark
+)
+
+func (t NetworkType) String() string {
+	switch t {
+	case NetworkGlobal:
+		return "global"
+	case NetworkLoopback:
+		return "loopback"
+	case NetworkPrivate:
+		return "private"
+	case NetworkTest:
+		return "test"
+	default:
+		return "unknown"
+	}
+}
+
+type (
+	IPMetadata struct {
+		Type    NetworkType
+		Network netip.Prefix
+		Geo     IPGeo
+		ASN     IPAS
+	}
+
+	IPGeo struct {
+		ContinentCode GeoCode
+		CountryCode   GeoCode
+		CountryName   string
+	}
+
+	IPAS struct {
+		ASN         int32
+		CountryCode GeoCode
+		Name        string
+		Org         string
+		Domain      string
+	}
+)

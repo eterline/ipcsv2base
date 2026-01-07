@@ -1,0 +1,38 @@
+package baseapi
+
+import (
+	"time"
+
+	"github.com/eterline/ipcsv2base/internal/model"
+)
+
+// IPMetadataDTO - Flat DTO for API responses.
+type IPMetadataDTO struct {
+	LookupDurationMs int64  `json:"lookup_duration_ms"`
+	NetworkType      string `json:"network_type"`
+	Network          string `json:"network,omitempty"`
+	ContinentCode    string `json:"continent_code,omitempty"`
+	CountryCode      string `json:"country_code,omitempty"`
+	CountryName      string `json:"country_name,omitempty"`
+	ASN              int32  `json:"asn,omitempty"`
+	ASNName          string `json:"asn_name,omitempty"`
+	ASNOrg           string `json:"asn_org,omitempty"`
+	ASNCountryCode   string `json:"asn_country_code,omitempty"`
+	Domain           string `json:"domain,omitempty"`
+}
+
+func domain2IPMetadataDTO(m *model.IPMetadata, dur time.Duration) *IPMetadataDTO {
+	return &IPMetadataDTO{
+		LookupDurationMs: dur.Milliseconds(),
+		NetworkType:      m.Type.String(),
+		Network:          m.Network.String(),
+		ContinentCode:    m.Geo.ContinentCode.String(),
+		CountryCode:      m.Geo.CountryCode.String(),
+		CountryName:      m.Geo.CountryName,
+		ASN:              m.ASN.ASN,
+		ASNName:          m.ASN.Name,
+		ASNOrg:           m.ASN.Org,
+		ASNCountryCode:   m.ASN.CountryCode.String(),
+		Domain:           m.ASN.Domain,
+	}
+}

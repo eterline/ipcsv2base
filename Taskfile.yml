@@ -2,8 +2,16 @@ version: '3'
 
 # ============== Variables ==============
 vars:
+  # Short git commit hash
+  COMMIT_HASH:
+    sh: git rev-parse --short HEAD
+  # Latest tag version
+  VERSION:
+    sh: git describe --tags --abbrev=0
   # Go build flags with embedded version info
-  GO_FLAGS: "-s -w"
+  GO_FLAGS: "-s -w -X main.CommitHash={{.COMMIT_HASH}} -X main.Version={{.VERSION}}"
+
+  DEV_RUN_FLAGS: ""
 
 # ============== Tasks ==============
 tasks:
@@ -27,5 +35,5 @@ tasks:
       - |
         go build -trimpath -ldflags="{{.GO_FLAGS}}" \
         -o "./ipcsv2base.exe" \
-        -v "./cmd/..."
+        -v "./cmd/ipcsv2base/main.go"
       - echo "=== Build Completed ==="
