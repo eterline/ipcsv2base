@@ -93,8 +93,6 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 		r.Get("/ip/{ip}", baseHandlers.LookupIPHandler)
 		r.Get("/ip/", baseHandlers.LookupIPHandler) // fallback: extract IP from request
 		r.Get("/ip", baseHandlers.LookupIPHandler)  // fallback: extract IP from request
-		// Lookup by network prefix (subnet)
-		r.Get("/subnet/{net}", baseHandlers.LookupSubnetHandler)
 	})
 
 	{

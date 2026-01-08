@@ -65,10 +65,48 @@ func NewRegistryIP(ctx context.Context, countryCSV, asnCSV string, ver IPVersion
 		return nil, fmt.Errorf("failed to read CSV file %s: %w", asnCSV, err)
 	}
 
-	set := NewIPContainerSet[networkMeta](1 << 22)
-	// set.Prepare()
+	netMap := map[netip.Prefix]networkMeta{}
+	cIDByC := map[string]uint32{}
 
-	return &RegistryIP{reg: set}, nil
+	countryTable.TableForEach(func(id uint32, prefixes []netip.Prefix, data countryData) {
+		for _, pfx := range prefixes {
+			netMap[pfx] = networkMeta{countryID: id}
+			if _, ok := cIDByC[data.CountryCode]; !ok {
+				cIDByC[data.CountryCode] = id
+			}
+		}
+	})
+	countryTable.Clear()
+
+	astable.TableForEach(func(id uint32, prefixes []netip.Prefix, data asData) {
+		for _, pfx := range prefixes {
+			meta, ok := netMap[pfx]
+			if !ok {
+				meta = networkMeta{countryID: cIDByC[data.CountryCode]}
+			}
+			meta.setAsID(id)
+			netMap[pfx] = meta
+		}
+	})
+
+	set := NewIPContainerSet[networkMeta](1 << 22)
+	for pfx, meta := range netMap {
+		set.AddPrefix(pfx, meta)
+	}
+	astable.Clear()
+
+	clrMap(&netMap)
+	clrMap(&cIDByC)
+
+	set.Prepare()
+
+	reg := &RegistryIP{
+		reg:          set,
+		countryTable: countryTable.Table(),
+		asTable:      astable.Table(),
+	}
+
+	return reg, nil
 }
 
 // Size returns the number of IP prefixes in the registry.
@@ -88,8 +126,8 @@ func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.I
 		Network: pfx,
 	}
 
-	if id, ok := meta.getCountryID(); ok {
-		c := base.countryTable[id]
+	if idx, ok := meta.getCountryIdxID(); ok {
+		c := base.countryTable[idx]
 		data.Geo = model.IPGeo{
 			ContinentCode: model.GeoCode(c.ContinentCode),
 			CountryCode:   model.GeoCode(c.CountryCode),
@@ -97,8 +135,8 @@ func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.I
 		}
 	}
 
-	if id, ok := meta.getAsID(); ok {
-		c := base.asTable[id]
+	if idx, ok := meta.getAsIdxID(); ok {
+		c := base.asTable[idx]
 		data.ASN = model.IPAS{
 			ASN:         c.Number,
 			CountryCode: model.GeoCode(c.CountryCode),
@@ -132,35 +170,23 @@ type networkMeta struct {
 	asID      uint32
 }
 
-func (m *networkMeta) setCountryID(id int) {
-	if m == nil {
-		panic("networkMeta is nil")
-	}
-	m.countryID = uint32(id)
-
-}
-
-func (m *networkMeta) setAsID(id int) {
+func (m *networkMeta) setAsID(id uint32) {
 	if m == nil {
 		panic("networkMeta is nil")
 	}
 	m.asID = uint32(id)
 }
 
-func (m networkMeta) getCountryID() (id uint32, ok bool) {
+func (m networkMeta) getCountryIdxID() (id uint32, ok bool) {
 	if m.countryID > 0 {
-		return m.countryID, true
+		return m.countryID - 1, true
 	}
 	return 0, false
 }
 
-func (m networkMeta) getAsID() (id uint32, ok bool) {
+func (m networkMeta) getAsIdxID() (id uint32, ok bool) {
 	if m.asID > 0 {
-		return m.asID, true
+		return m.asID - 1, true
 	}
 	return 0, false
-}
-
-func (m networkMeta) valid() bool {
-	return (m.countryID > 0) && (m.asID > 0)
 }

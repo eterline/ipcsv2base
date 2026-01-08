@@ -77,7 +77,7 @@ func csvForEach(file string, fieldsCount int, verAllow IPVersion, do csvEachFunc
 			continue
 		}
 
-		if err := do(pfx, recs[0:]); err != nil {
+		if err := do(pfx, recs[1:]); err != nil {
 			return err
 		}
 	}
@@ -87,38 +87,71 @@ func csvForEach(file string, fieldsCount int, verAllow IPVersion, do csvEachFunc
 
 // ==========================
 
+const maxMetaIds = 1 << 24
+
 type uniquePrefixTable[T comparable] struct {
-	index map[T]int
+	index map[T]uint32
 	data  []T
 	nets  [][]netip.Prefix
 }
 
 func newUniquePrefixTable[T comparable](capHint int) *uniquePrefixTable[T] {
 	return &uniquePrefixTable[T]{
-		index: make(map[T]int, capHint),
+		index: make(map[T]uint32, capHint),
 		data:  make([]T, 0, capHint),
 		nets:  make([][]netip.Prefix, 0, capHint),
 	}
 }
 
-func (t *uniquePrefixTable[T]) Add(pfx netip.Prefix, c T) int {
+func (t *uniquePrefixTable[T]) Add(pfx netip.Prefix, c T) {
 	if id, ok := t.index[c]; ok {
-		t.nets[id] = append(t.nets[id], pfx)
-		return id
+		t.nets[id-1] = append(t.nets[id-1], pfx)
+		return
 	}
 
-	id := len(t.data)
+	id := uint32(len(t.data) + 1)
+	if id > maxMetaIds {
+		panic("too many indexes")
+	}
+
 	t.index[c] = id
 	t.data = append(t.data, c)
 	t.nets = append(t.nets, []netip.Prefix{pfx})
-
-	return id
 }
 
-func (t *uniquePrefixTable[T]) Data(id int) T {
-	return t.data[id]
+func (t *uniquePrefixTable[T]) Table() []T {
+	return t.data
 }
 
-func (t *uniquePrefixTable[T]) Prefixes(id int) []netip.Prefix {
-	return t.nets[id]
+func (t *uniquePrefixTable[T]) Prefixes(id uint32) []netip.Prefix {
+	return t.nets[id-1]
+}
+
+func (t *uniquePrefixTable[T]) TableForEach(f func(id uint32, prefixes []netip.Prefix, data T)) {
+	for _, id := range t.index {
+		f(id, t.Prefixes(id), t.data[id-1])
+	}
+}
+
+func (t *uniquePrefixTable[T]) Clear() {
+	clrSliceOfSlices(&t.nets)
+	clrMap(&t.index)
+}
+
+// ==============
+
+func clrMap[K comparable, V any](mPtr *map[K]V) {
+	m := *mPtr
+	for key := range m {
+		delete(m, key)
+	}
+	*mPtr = nil
+}
+
+func clrSliceOfSlices[V any](sPtr *[][]V) {
+	s := *sPtr
+	for i := range s {
+		s[i] = nil
+	}
+	*sPtr = nil
 }
