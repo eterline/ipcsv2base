@@ -31,9 +31,8 @@ var (
 	cfg = config.Configuration{
 		Profiling: "",
 		Log: config.Log{
-			LogLevel:      "info",
-			JSONlog:       false,
-			AccessLogFile: "stdout",
+			LogLevel: "info",
+			JSONlog:  false,
 		},
 		Server: config.Server{
 			Listen:     ":3000",
@@ -43,6 +42,8 @@ var (
 		Base: config.Base{
 			CountryCSV: "ip-to-country.csv",
 			AsnCSV:     "ip-to-asn.csv",
+			IPver:      "all",
+			Type:       "all",
 		},
 	}
 )

@@ -35,6 +35,23 @@ func (cset *IPContainerSet[T]) AddPrefix(pfx netip.Prefix, value T) {
 	cset.AddIPRange(netipx.RangeOfPrefix(pfx), value)
 }
 
+func (cset *IPContainerSet[T]) MergeAdjacent() {
+	if len(cset.set) == 0 {
+		return
+	}
+
+	out := cset.set[:1]
+	for _, e := range cset.set[1:] {
+		last := &out[len(out)-1]
+		if last.data == e.data && last.rng.To().Next() == e.rng.From() {
+			last.rng = netipx.IPRangeFrom(last.rng.From(), e.rng.To())
+		} else {
+			out = append(out, e)
+		}
+	}
+	cset.set = out
+}
+
 func (cset *IPContainerSet[T]) Prepare() {
 	sort.Slice(cset.set, func(i, j int) bool {
 		return cset.set[i].rng.From().Compare(cset.set[j].rng.From()) < 0
@@ -57,7 +74,7 @@ func (cset *IPContainerSet[T]) Get(ip netip.Addr) (pfx netip.Prefix, data T, ok 
 	}
 
 	if i > 0 && cset.set[i-1].rng.Contains(ip) {
-		pfx, ok := cset.set[i].rng.Prefix()
+		pfx, ok := cset.set[i-1].rng.Prefix()
 		if ok {
 			return pfx, cset.set[i-1].data.Value(), true
 		}

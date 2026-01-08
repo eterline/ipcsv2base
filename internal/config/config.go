@@ -5,28 +5,38 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/alexflint/go-arg"
+	"github.com/eterline/ipcsv2base/pkg/validate"
+	"github.com/go-playground/validator/v10"
 )
+
+var val *validator.Validate
+
+func init() {
+	val = validator.New()
+}
 
 type (
 	Log struct {
-		LogLevel      string `arg:"--log-level" help:"Logging level: debug|info|warn|error"`
-		JSONlog       bool   `arg:"--log-json,-j" help:"Set logs to JSON format"`
-		AccessLogFile string `arg:"--access-log" help:"Set access log file"`
+		LogLevel string `arg:"--log-level" help:"Logging level: debug|info|warn|error" validate:"oneof=debug info warn error"`
+		JSONlog  bool   `arg:"--log-json,-j" help:"Set logs to JSON format"`
 	}
 
 	Server struct {
 		Listen     string `arg:"--listen,-l" help:"Server listen address"`
-		CrtFileSSL string `arg:"--ssl-cert,-c" help:"Server SSL certificate file"`
-		KeyFileSSL string `arg:"--ssl-key,-k" help:"Server SSL key file"`
+		CrtFileSSL string `arg:"--ssl-cert,-c" help:"Server SSL certificate file" validate:"required_with=KeyFileSSL"`
+		KeyFileSSL string `arg:"--ssl-key,-k" help:"Server SSL key file" validate:"required_with=CrtFileSSL"`
 	}
 
 	Base struct {
-		CountryCSV string `arg:"--country-csv" help:"Path to the country CSV file"`
-		AsnCSV     string `arg:"--asn-csv" help:"Path to the ASN CSV file"`
+		CountryCSV string `arg:"--country-csv" help:"Path to the country CSV file" validate:"filepath"`
+		AsnCSV     string `arg:"--asn-csv" help:"Path to the ASN CSV file" validate:"filepath"`
+		IPver      string `arg:"--ip-ver" help:"IP version in base selector: all|v4|v6" validate:"oneof=all v4 v6"`
+		Type       string `arg:"--base-type" help:"IP base data type: all|codeonly" validate:"oneof=all codeonly"`
 	}
 
 	Configuration struct {
@@ -57,6 +67,21 @@ func ParseArgs(c *Configuration) error {
 		p.WriteHelp(os.Stdout)
 		os.Exit(1)
 	}
+
+	if err := val.Struct(c); err != nil {
+		switch errs := err.(type) {
+		case validator.ValidationErrors:
+			wrapped := validate.NewValidationErrorWrapper()
+			for _, e := range errs {
+				wrapped.Errors[e.StructNamespace()] = fmt.Sprintf("failed on '%s' tag", e.Tag())
+			}
+			return wrapped
+
+		default:
+			return fmt.Errorf("validation failed: %w", err)
+		}
+	}
+
 	return err
 }
 

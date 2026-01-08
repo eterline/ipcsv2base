@@ -37,17 +37,45 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	// ========================================================
 
 	log.Info("starting IP base initialization")
-	log.Info("loading CSV files", "asn_base", cfg.AsnCSV, "country_base", cfg.CountryCSV)
+	log.Info(
+		"loading CSV files",
+		"ip_version", cfg.Base.IPver,
+		"asn_base", cfg.AsnCSV,
+		"country_base", cfg.CountryCSV,
+	)
 
-	base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV)
-	if err != nil {
-		log.Error("Failed to prepare IP base", "error", err)
-		root.MustStopApp(1)
+	startInit := time.Now()
+
+	// TODO: registry factory later...
+	var lookuper ipbase.MetaLookuper
+
+	if cfg.Base.Type == "codeonly" {
+		base, err := ipbaseProvide.NewRegistryContryOnlyIP(ctx, cfg.CountryCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
+		if err != nil {
+			log.Error("Failed to prepare IP base", "error", err)
+			root.MustStopApp(1)
+		}
+		log.Info(
+			"ip base loaded successfully",
+			"base_records", base.Size(),
+			"initialization_time_ms", time.Since(startInit).Milliseconds(),
+		)
+		lookuper = base
+	} else {
+		base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
+		if err != nil {
+			log.Error("Failed to prepare IP base", "error", err)
+			root.MustStopApp(1)
+		}
+		log.Info(
+			"ip base loaded successfully",
+			"base_records", base.Size(),
+			"initialization_time_ms", time.Since(startInit).Milliseconds(),
+		)
+		lookuper = base
 	}
 
-	log.Info("ip base loaded successfully", "base_records", base.Size())
-
-	baseSrvc := ipbase.NewIPBaseService(log, base, &ipbaseProvide.IPbaseCacheMock{})
+	baseSrvc := ipbase.NewIPBaseService(log, lookuper, &ipbaseProvide.IPbaseCacheMock{})
 	baseHandlers := baseapi.NewBaseAPIHandlerGroup(log, baseSrvc, true)
 	log.Info("base API handler group created")
 
@@ -57,12 +85,14 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	rootMux.NotFound(api.HandleNotFound)
 	rootMux.MethodNotAllowed(api.HandleNotAllowedMethod)
 
+	// Types usage description
+	rootMux.Get("/types", baseHandlers.AvailableTypes())
+
 	rootMux.Route("/lookup", func(r chi.Router) {
-		// Types usage description
-		r.Get("/types", baseHandlers.AvailableTypes())
 		// Lookup by IP, path parameter or fallback to request IP
 		r.Get("/ip/{ip}", baseHandlers.LookupIPHandler)
-		r.Get("/ip", baseHandlers.LookupIPHandler) // fallback: extract IP from request
+		r.Get("/ip/", baseHandlers.LookupIPHandler) // fallback: extract IP from request
+		r.Get("/ip", baseHandlers.LookupIPHandler)  // fallback: extract IP from request
 		// Lookup by network prefix (subnet)
 		r.Get("/subnet/{net}", baseHandlers.LookupSubnetHandler)
 	})

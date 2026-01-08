@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
-	"runtime"
 	"strconv"
 	"unique"
 
@@ -15,24 +14,7 @@ import (
 	mmaprc "github.com/eterline/ipcsv2base/pkg/mmapread"
 )
 
-type code2bytes [2]byte
-
-var emptyCode = code2bytes{0, 0}
-
-func makecode2bytes(s string) code2bytes {
-	if len(s) >= 2 {
-		return [2]byte{s[0], s[1]}
-	}
-	return emptyCode
-}
-
-func (c2b code2bytes) String() string {
-	if c2b == emptyCode {
-		return ""
-	}
-	return string(c2b[:])
-}
-
+// ipMetadata stores IP-related metadata including ASN, organization, and geolocation codes.
 type ipMetadata struct {
 	ASN           int32
 	Name          unique.Handle[string]
@@ -43,46 +25,41 @@ type ipMetadata struct {
 	CountryName   unique.Handle[string]
 }
 
-type metaInterner map[netip.Prefix]ipMetadata
-
-func (mi metaInterner) Clear() {
-	for key := range mi {
-		delete(mi, key)
-	}
-}
-
+// RegistryIP represents a lookup registry for IP metadata.
 type RegistryIP struct {
 	reg *IPContainerSet[ipMetadata]
 }
 
-func NewRegistryIP(ctx context.Context, countryCSV, asnCSV string) (*RegistryIP, error) {
-	internMeta := metaInterner{}
+// NewRegistryIP constructs a new RegistryIP by reading ASN and country CSV files.
+// ver specifies the IP version filter (IPv4, IPv6, or both).
+func NewRegistryIP(ctx context.Context, countryCSV, asnCSV string, ver IPVersion) (*RegistryIP, error) {
+	intern := newInterner()
 
-	if err := readCountryCSV(countryCSV, &internMeta); err != nil {
+	if err := readCountryCSV(countryCSV, intern, ver); err != nil {
 		return nil, fmt.Errorf("failed to read CSV file %s: %w", countryCSV, err)
 	}
 
-	if err := readAsnCSV(asnCSV, &internMeta); err != nil {
+	if err := readAsnCSV(asnCSV, intern, ver); err != nil {
 		return nil, fmt.Errorf("failed to read CSV file %s: %w", asnCSV, err)
 	}
 
 	set := NewIPContainerSet[ipMetadata](1 << 22)
-
-	for pfx, meta := range internMeta {
+	for pfx, meta := range intern.meta {
 		set.AddPrefix(pfx, meta)
 	}
 
-	internMeta.Clear()
+	intern.Clear()
 	set.Prepare()
-	runtime.GC()
 
 	return &RegistryIP{reg: set}, nil
 }
 
+// Size returns the number of IP prefixes in the registry.
 func (base *RegistryIP) Size() int {
 	return base.reg.Size()
 }
 
+// LookupIP returns metadata for a given IP address.
 func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.IPMetadata, error) {
 	pfx, m, ok := base.reg.Get(addr)
 	if !ok {
@@ -109,7 +86,8 @@ func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.I
 	return data, nil
 }
 
-func readCountryCSV(file string, intern *metaInterner) error {
+// readCountryCSV reads country CSV file and populates the interner with metadata.
+func readCountryCSV(file string, intern *interner, ver IPVersion) error {
 	f, err := mmaprc.OpenMMapReadCloser(file)
 	if err != nil {
 		return err
@@ -119,11 +97,9 @@ func readCountryCSV(file string, intern *metaInterner) error {
 	countryRD := csv.NewReader(f)
 	countryRD.FieldsPerRecord = 4
 
-	if _, err := countryRD.Read(); err != nil {
+	if _, err := countryRD.Read(); err != nil { // skip header
 		return err
 	}
-
-	internMeta := *intern
 
 	for {
 		recs, err := countryRD.Read()
@@ -135,7 +111,7 @@ func readCountryCSV(file string, intern *metaInterner) error {
 		}
 
 		pfx, err := netip.ParsePrefix(recs[0])
-		if err != nil {
+		if err != nil || !ver.validate(pfx.Addr()) {
 			continue
 		}
 
@@ -149,30 +125,30 @@ func readCountryCSV(file string, intern *metaInterner) error {
 			CountryName:   unique.Make(recs[3]),
 		}
 
-		internMeta[pfx] = meta
+		intern.c2c[meta.CountryCode] = meta.ContinentCode
+		intern.meta[pfx] = meta
 	}
 
 	return nil
 }
 
-func readAsnCSV(file string, intern *metaInterner) error {
+// readAsnCSV reads ASN CSV file and updates the interner with ASN and organization info.
+func readAsnCSV(file string, intern *interner, ver IPVersion) error {
 	f, err := mmaprc.OpenMMapReadCloser(file)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	countryRD := csv.NewReader(f)
-	countryRD.FieldsPerRecord = 6
+	asnRD := csv.NewReader(f)
+	asnRD.FieldsPerRecord = 6
 
-	if _, err := countryRD.Read(); err != nil {
+	if _, err := asnRD.Read(); err != nil { // skip header
 		return err
 	}
 
-	internMeta := *intern
-
 	for {
-		recs, err := countryRD.Read()
+		recs, err := asnRD.Read()
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -181,7 +157,7 @@ func readAsnCSV(file string, intern *metaInterner) error {
 		}
 
 		pfx, err := netip.ParsePrefix(recs[0])
-		if err != nil {
+		if err != nil || !ver.validate(pfx.Addr()) {
 			continue
 		}
 
@@ -190,10 +166,11 @@ func readAsnCSV(file string, intern *metaInterner) error {
 			continue
 		}
 
-		meta, ok := internMeta[pfx]
+		meta, ok := intern.meta[pfx]
 		if !ok {
-			meta.ContinentCode = emptyCode
-			meta.CountryCode = makecode2bytes(recs[2])
+			country := makecode2bytes(recs[2])
+			meta.ContinentCode = intern.c2c[country]
+			meta.CountryCode = country
 			meta.CountryName = unique.Make("")
 		}
 
@@ -202,7 +179,7 @@ func readAsnCSV(file string, intern *metaInterner) error {
 		meta.Org = unique.Make(recs[4])
 		meta.Domain = unique.Make(recs[5])
 
-		internMeta[pfx] = meta
+		intern.meta[pfx] = meta
 	}
 
 	return nil

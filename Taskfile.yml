@@ -13,6 +13,10 @@ vars:
 
   DEV_RUN_FLAGS: ""
 
+  BIN: ipcsv2base
+  OUT: ./dist
+  PLATFORMS: ["linux amd64", "freebsd amd64","windows amd64"]
+
 # ============== Tasks ==============
 tasks:
 
@@ -37,3 +41,21 @@ tasks:
         -o "./ipcsv2base.exe" \
         -v "./cmd/ipcsv2base/main.go"
       - echo "=== Build Completed ==="
+
+  build-all:
+    desc: "Build binaries for multiple OS/ARCH"
+    silent: true
+    cmds:
+      - echo "=== Building binaries for systems ==="
+      - mkdir -p "{{.OUT}}"
+      - for:
+          matrix:
+            OS: ['windows', 'linux', 'darwin']
+            ARCH: ['amd64', 'arm64']
+        cmd: |
+          echo "Build for -> {{.ITEM.OS}}/{{.ITEM.ARCH}}" && \
+          GOOS={{.ITEM.OS}} GOARCH={{.ITEM.ARCH}} \
+          go build -trimpath -ldflags="{{.GO_FLAGS}}" \
+          -o "./{{.OUT}}/ipcsv2base-{{.ITEM.OS}}-{{.ITEM.ARCH}}{{if eq .ITEM.OS "windows"}}.exe{{end}}" \
+          -v "./cmd/ipcsv2base/main.go"
+      - echo "=== Building binaries completed ==="

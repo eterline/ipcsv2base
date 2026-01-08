@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/eterline/ipcsv2base/internal/interface/http/api"
@@ -119,6 +120,13 @@ func (h *BaseAPIHandlerGroup) LookupSubnetHandler(w http.ResponseWriter, r *http
 	defer cancel()
 
 	rawNet := chi.URLParam(r, "net")
+	if strings.Contains(rawNet, " ") {
+		cleanNet := strings.ReplaceAll(rawNet, " ", "")
+		newPath := strings.Replace(r.URL.Path, rawNet, cleanNet, 1)
+		http.Redirect(w, r, newPath, http.StatusFound)
+		return
+	}
+
 	log := h.log.With("prefix", rawNet)
 
 	startAt := time.Now()
