@@ -1,51 +1,12 @@
 package ipbase
 
-import "net/netip"
+import (
+	"encoding/csv"
+	"io"
+	"net/netip"
 
-// interner temporarily holds metadata maps during CSV processing.
-type interner struct {
-	meta map[netip.Prefix]ipMetadata
-	c2c  map[code2bytes]code2bytes
-}
-
-// newInterner creates a new interner with initialized maps.
-func newInterner() *interner {
-	return &interner{
-		meta: make(map[netip.Prefix]ipMetadata),
-		c2c:  make(map[code2bytes]code2bytes),
-	}
-}
-
-// Clear releases all internal maps.
-func (i *interner) Clear() {
-	i.meta = nil
-	i.c2c = nil
-}
-
-// =============================================
-
-// code2bytes stores a 2-character code as a fixed-size array.
-type code2bytes [2]byte
-
-var emptyCode = code2bytes{0, 0}
-
-// makecode2bytes creates a code2bytes from a string. Returns emptyCode if string is too short.
-func makecode2bytes(s string) code2bytes {
-	if len(s) >= 2 {
-		return [2]byte{s[0], s[1]}
-	}
-	return emptyCode
-}
-
-// String converts the 2-byte code to a string.
-func (c2b code2bytes) String() string {
-	if c2b == emptyCode {
-		return ""
-	}
-	return string(c2b[:])
-}
-
-// =============================================
+	mmaprc "github.com/eterline/ipcsv2base/pkg/mmapread"
+)
 
 // IPVersion represents the IP address version type.
 type IPVersion uint8
@@ -80,4 +41,84 @@ func (v IPVersion) validate(ip netip.Addr) bool {
 	default:
 		return false
 	}
+}
+
+// ==========================
+
+type csvEachFunc func(network netip.Prefix, fields []string) error
+
+// readAsnCSV reads ASN CSV file and updates the interner with ASN and organization info.
+func csvForEach(file string, fieldsCount int, verAllow IPVersion, do csvEachFunc) error {
+	f, err := mmaprc.OpenMMapReadCloser(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	asnRD := csv.NewReader(f)
+	asnRD.FieldsPerRecord = fieldsCount
+
+	// skip header
+	if _, err := asnRD.Read(); err != nil {
+		return err
+	}
+
+	for {
+		recs, err := asnRD.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		pfx, err := netip.ParsePrefix(recs[0])
+		if err != nil || !verAllow.validate(pfx.Addr()) {
+			continue
+		}
+
+		if err := do(pfx, recs[0:]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ==========================
+
+type uniquePrefixTable[T comparable] struct {
+	index map[T]int
+	data  []T
+	nets  [][]netip.Prefix
+}
+
+func newUniquePrefixTable[T comparable](capHint int) *uniquePrefixTable[T] {
+	return &uniquePrefixTable[T]{
+		index: make(map[T]int, capHint),
+		data:  make([]T, 0, capHint),
+		nets:  make([][]netip.Prefix, 0, capHint),
+	}
+}
+
+func (t *uniquePrefixTable[T]) Add(pfx netip.Prefix, c T) int {
+	if id, ok := t.index[c]; ok {
+		t.nets[id] = append(t.nets[id], pfx)
+		return id
+	}
+
+	id := len(t.data)
+	t.index[c] = id
+	t.data = append(t.data, c)
+	t.nets = append(t.nets, []netip.Prefix{pfx})
+
+	return id
+}
+
+func (t *uniquePrefixTable[T]) Data(id int) T {
+	return t.data[id]
+}
+
+func (t *uniquePrefixTable[T]) Prefixes(id int) []netip.Prefix {
+	return t.nets[id]
 }

@@ -49,31 +49,31 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	// TODO: registry factory later...
 	var lookuper ipbase.MetaLookuper
 
-	if cfg.Base.Type == "codeonly" {
-		base, err := ipbaseProvide.NewRegistryContryOnlyIP(ctx, cfg.CountryCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
-		if err != nil {
-			log.Error("Failed to prepare IP base", "error", err)
-			root.MustStopApp(1)
-		}
-		log.Info(
-			"ip base loaded successfully",
-			"base_records", base.Size(),
-			"initialization_time_ms", time.Since(startInit).Milliseconds(),
-		)
-		lookuper = base
-	} else {
-		base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
-		if err != nil {
-			log.Error("Failed to prepare IP base", "error", err)
-			root.MustStopApp(1)
-		}
-		log.Info(
-			"ip base loaded successfully",
-			"base_records", base.Size(),
-			"initialization_time_ms", time.Since(startInit).Milliseconds(),
-		)
-		lookuper = base
+	// if cfg.Base.Type == "codeonly" {
+	// 	base, err := ipbaseProvide.NewRegistryContryOnlyIP(ctx, cfg.CountryCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
+	// 	if err != nil {
+	// 		log.Error("Failed to prepare IP base", "error", err)
+	// 		root.MustStopApp(1)
+	// 	}
+	// 	log.Info(
+	// 		"ip base loaded successfully",
+	// 		"base_records", base.Size(),
+	// 		"initialization_time_ms", time.Since(startInit).Milliseconds(),
+	// 	)
+	// 	lookuper = base
+	// } else {
+	base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
+	if err != nil {
+		log.Error("Failed to prepare IP base", "error", err)
+		root.MustStopApp(1)
 	}
+	log.Info(
+		"ip base loaded successfully",
+		"base_records", base.Size(),
+		"initialization_time_ms", time.Since(startInit).Milliseconds(),
+	)
+	lookuper = base
+	// }
 
 	baseSrvc := ipbase.NewIPBaseService(log, lookuper, &ipbaseProvide.IPbaseCacheMock{})
 	baseHandlers := baseapi.NewBaseAPIHandlerGroup(log, baseSrvc, true)

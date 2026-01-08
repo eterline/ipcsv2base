@@ -2,54 +2,71 @@ package ipbase
 
 import (
 	"context"
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
 	"net/netip"
 	"strconv"
-	"unique"
 
 	"github.com/eterline/ipcsv2base/internal/model"
-	mmaprc "github.com/eterline/ipcsv2base/pkg/mmapread"
 )
 
 // ipMetadata stores IP-related metadata including ASN, organization, and geolocation codes.
-type ipMetadata struct {
-	ASN           int32
-	Name          unique.Handle[string]
-	Org           unique.Handle[string]
-	Domain        unique.Handle[string]
-	ContinentCode code2bytes
-	CountryCode   code2bytes
-	CountryName   unique.Handle[string]
-}
 
 // RegistryIP represents a lookup registry for IP metadata.
 type RegistryIP struct {
-	reg *IPContainerSet[ipMetadata]
+	reg          *IPContainerSet[networkMeta]
+	countryTable []countryData
+	asTable      []asData
 }
 
 // NewRegistryIP constructs a new RegistryIP by reading ASN and country CSV files.
 // ver specifies the IP version filter (IPv4, IPv6, or both).
 func NewRegistryIP(ctx context.Context, countryCSV, asnCSV string, ver IPVersion) (*RegistryIP, error) {
-	intern := newInterner()
 
-	if err := readCountryCSV(countryCSV, intern, ver); err != nil {
+	countryTable := newUniquePrefixTable[countryData](0)
+	astable := newUniquePrefixTable[asData](0)
+
+	if err := csvForEach(
+		countryCSV, 4, ver,
+		func(network netip.Prefix, fields []string) error {
+
+			countryTable.Add(network, countryData{
+				ContinentCode: fields[0],
+				CountryCode:   fields[1],
+				CountryName:   fields[2],
+			})
+
+			return nil
+		},
+	); err != nil {
 		return nil, fmt.Errorf("failed to read CSV file %s: %w", countryCSV, err)
 	}
 
-	if err := readAsnCSV(asnCSV, intern, ver); err != nil {
+	if err := csvForEach(
+		asnCSV, 6, ver,
+		func(network netip.Prefix, fields []string) error {
+
+			asn, err := strconv.ParseInt(fields[0], 0, 32)
+			if err != nil {
+				return err
+			}
+
+			astable.Add(network, asData{
+				Number:      int32(asn),
+				CountryCode: fields[1],
+				Name:        fields[2],
+				Org:         fields[3],
+				Domain:      fields[4],
+			})
+
+			return nil
+		},
+	); err != nil {
 		return nil, fmt.Errorf("failed to read CSV file %s: %w", asnCSV, err)
 	}
 
-	set := NewIPContainerSet[ipMetadata](1 << 22)
-	for pfx, meta := range intern.meta {
-		set.AddPrefix(pfx, meta)
-	}
-
-	intern.Clear()
-	set.Prepare()
+	set := NewIPContainerSet[networkMeta](1 << 22)
+	// set.Prepare()
 
 	return &RegistryIP{reg: set}, nil
 }
@@ -61,7 +78,7 @@ func (base *RegistryIP) Size() int {
 
 // LookupIP returns metadata for a given IP address.
 func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.IPMetadata, error) {
-	pfx, m, ok := base.reg.Get(addr)
+	pfx, meta, ok := base.reg.Get(addr)
 	if !ok {
 		return nil, errors.New("failed lookup")
 	}
@@ -69,118 +86,81 @@ func (base *RegistryIP) LookupIP(ctx context.Context, addr netip.Addr) (*model.I
 	data := &model.IPMetadata{
 		Type:    model.NetworkGlobal,
 		Network: pfx,
-		Geo: model.IPGeo{
-			ContinentCode: model.GeoCode(m.ContinentCode.String()),
-			CountryCode:   model.GeoCode(m.CountryCode.String()),
-			CountryName:   m.CountryName.Value(),
-		},
-		ASN: model.IPAS{
-			ASN:         m.ASN,
-			CountryCode: model.GeoCode(m.CountryCode.String()),
-			Name:        m.Name.Value(),
-			Org:         m.Org.Value(),
-			Domain:      m.Domain.Value(),
-		},
+	}
+
+	if id, ok := meta.getCountryID(); ok {
+		c := base.countryTable[id]
+		data.Geo = model.IPGeo{
+			ContinentCode: model.GeoCode(c.ContinentCode),
+			CountryCode:   model.GeoCode(c.CountryCode),
+			CountryName:   c.CountryName,
+		}
+	}
+
+	if id, ok := meta.getAsID(); ok {
+		c := base.asTable[id]
+		data.ASN = model.IPAS{
+			ASN:         c.Number,
+			CountryCode: model.GeoCode(c.CountryCode),
+			Name:        c.Name,
+			Org:         c.Org,
+			Domain:      c.Domain,
+		}
 	}
 
 	return data, nil
 }
 
-// readCountryCSV reads country CSV file and populates the interner with metadata.
-func readCountryCSV(file string, intern *interner, ver IPVersion) error {
-	f, err := mmaprc.OpenMMapReadCloser(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+// ===============================
 
-	countryRD := csv.NewReader(f)
-	countryRD.FieldsPerRecord = 4
-
-	if _, err := countryRD.Read(); err != nil { // skip header
-		return err
-	}
-
-	for {
-		recs, err := countryRD.Read()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-
-		pfx, err := netip.ParsePrefix(recs[0])
-		if err != nil || !ver.validate(pfx.Addr()) {
-			continue
-		}
-
-		meta := ipMetadata{
-			ASN:           0,
-			Name:          unique.Make(""),
-			Org:           unique.Make(""),
-			Domain:        unique.Make(""),
-			ContinentCode: makecode2bytes(recs[1]),
-			CountryCode:   makecode2bytes(recs[2]),
-			CountryName:   unique.Make(recs[3]),
-		}
-
-		intern.c2c[meta.CountryCode] = meta.ContinentCode
-		intern.meta[pfx] = meta
-	}
-
-	return nil
+type countryData struct {
+	ContinentCode string
+	CountryCode   string
+	CountryName   string
 }
 
-// readAsnCSV reads ASN CSV file and updates the interner with ASN and organization info.
-func readAsnCSV(file string, intern *interner, ver IPVersion) error {
-	f, err := mmaprc.OpenMMapReadCloser(file)
-	if err != nil {
-		return err
+type asData struct {
+	Number      int32
+	CountryCode string
+	Name        string
+	Org         string
+	Domain      string
+}
+
+type networkMeta struct {
+	countryID uint32
+	asID      uint32
+}
+
+func (m *networkMeta) setCountryID(id int) {
+	if m == nil {
+		panic("networkMeta is nil")
 	}
-	defer f.Close()
+	m.countryID = uint32(id)
 
-	asnRD := csv.NewReader(f)
-	asnRD.FieldsPerRecord = 6
+}
 
-	if _, err := asnRD.Read(); err != nil { // skip header
-		return err
+func (m *networkMeta) setAsID(id int) {
+	if m == nil {
+		panic("networkMeta is nil")
 	}
+	m.asID = uint32(id)
+}
 
-	for {
-		recs, err := asnRD.Read()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-
-		pfx, err := netip.ParsePrefix(recs[0])
-		if err != nil || !ver.validate(pfx.Addr()) {
-			continue
-		}
-
-		asn, err := strconv.ParseInt(recs[1], 0, 32)
-		if err != nil {
-			continue
-		}
-
-		meta, ok := intern.meta[pfx]
-		if !ok {
-			country := makecode2bytes(recs[2])
-			meta.ContinentCode = intern.c2c[country]
-			meta.CountryCode = country
-			meta.CountryName = unique.Make("")
-		}
-
-		meta.ASN = int32(asn)
-		meta.Name = unique.Make(recs[3])
-		meta.Org = unique.Make(recs[4])
-		meta.Domain = unique.Make(recs[5])
-
-		intern.meta[pfx] = meta
+func (m networkMeta) getCountryID() (id uint32, ok bool) {
+	if m.countryID > 0 {
+		return m.countryID, true
 	}
+	return 0, false
+}
 
-	return nil
+func (m networkMeta) getAsID() (id uint32, ok bool) {
+	if m.asID > 0 {
+		return m.asID, true
+	}
+	return 0, false
+}
+
+func (m networkMeta) valid() bool {
+	return (m.countryID > 0) && (m.asID > 0)
 }
