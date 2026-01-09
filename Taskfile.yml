@@ -53,7 +53,7 @@ tasks:
             OS: ['windows', 'linux', 'darwin']
             ARCH: ['amd64', 'arm64']
         cmd: |
-          echo "Build for -> {{.ITEM.OS}}/{{.ITEM.ARCH}}" && \
+          echo "Build for -> {{.ITEM.OS}}/{{.ITEM.ARCH}}: ipcsv2base-{{.ITEM.OS}}-{{.ITEM.ARCH}}{{if eq .ITEM.OS "windows"}}.exe{{end}}" && \
           GOOS={{.ITEM.OS}} GOARCH={{.ITEM.ARCH}} \
           go build -trimpath -ldflags="{{.GO_FLAGS}}" \
           -o "./{{.OUT}}/ipcsv2base-{{.ITEM.OS}}-{{.ITEM.ARCH}}{{if eq .ITEM.OS "windows"}}.exe{{end}}" \
