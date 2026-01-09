@@ -16,7 +16,11 @@ func (u uint128t) ToAddr() (a netip.Addr) {
 	var b [16]byte
 	binary.BigEndian.PutUint64(b[:8], u.hi)
 	binary.BigEndian.PutUint64(b[8:], u.lo)
-	return netip.AddrFrom16(b)
+	a = netip.AddrFrom16(b)
+	if a.Is4In6() {
+		a = netip.AddrFrom4(a.As4())
+	}
+	return a
 }
 
 func Addr2Uint128t(a netip.Addr) (u uint128t) {
