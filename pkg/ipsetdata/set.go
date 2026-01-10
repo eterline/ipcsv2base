@@ -1,4 +1,4 @@
-package ipbase
+package ipsetdata
 
 import (
 	"net/netip"
@@ -7,23 +7,23 @@ import (
 	"go4.org/netipx"
 )
 
-type SetContainerEntry[T comparable] struct {
+type container[T comparable] struct {
 	rng  rangeUint128t
 	data T
 }
 
 type IPContainerSet[T comparable] struct {
-	set []SetContainerEntry[T]
+	set []container[T]
 }
 
 func NewIPContainerSet[T comparable](prep int) *IPContainerSet[T] {
 	return &IPContainerSet[T]{
-		set: make([]SetContainerEntry[T], 0, prep),
+		set: make([]container[T], 0, prep),
 	}
 }
 
 func (cset *IPContainerSet[T]) AddIPRange(rng netipx.IPRange, value T) {
-	cset.set = append(cset.set, SetContainerEntry[T]{
+	cset.set = append(cset.set, container[T]{
 		rng: rangeUint128t{
 			start: Addr2Uint128t(rng.From()),
 			end:   Addr2Uint128t(rng.To()),
@@ -46,8 +46,6 @@ func (cset *IPContainerSet[T]) Prepare() {
 
 func (cset *IPContainerSet[T]) Get(ip netip.Addr) (pfx netip.Prefix, data T, ok bool) {
 	ipvec := Addr2Uint128t(ip)
-
-	netipx.IPRange{}.Prefix()
 
 	i := sort.Search(len(cset.set), func(i int) bool {
 		return !cset.set[i].rng.start.Less(ipvec)

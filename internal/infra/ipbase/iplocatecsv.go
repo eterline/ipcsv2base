@@ -8,13 +8,14 @@ import (
 	"strconv"
 
 	"github.com/eterline/ipcsv2base/internal/model"
+	"github.com/eterline/ipcsv2base/pkg/ipsetdata"
 )
 
 // ipMetadata stores IP-related metadata including ASN, organization, and geolocation codes.
 
 // RegistryIP represents a lookup registry for IP metadata.
 type RegistryIP struct {
-	reg          *IPContainerSet[networkMeta]
+	reg          *ipsetdata.IPContainerSet[networkMeta]
 	countryTable []countryData
 	asTable      []asData
 }
@@ -89,7 +90,7 @@ func NewRegistryIP(ctx context.Context, countryCSV, asnCSV string, ver IPVersion
 		}
 	})
 
-	set := NewIPContainerSet[networkMeta](1 << 22)
+	set := ipsetdata.NewIPContainerSet[networkMeta](1 << 22)
 	for pfx, meta := range netMap {
 		set.AddPrefix(pfx, meta)
 	}
