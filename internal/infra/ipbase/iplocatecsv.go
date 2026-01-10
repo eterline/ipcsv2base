@@ -11,8 +11,6 @@ import (
 	"github.com/eterline/ipcsv2base/pkg/ipsetdata"
 )
 
-// ipMetadata stores IP-related metadata including ASN, organization, and geolocation codes.
-
 // RegistryIP represents a lookup registry for IP metadata.
 type RegistryIP struct {
 	reg          *ipsetdata.IPContainerSet[networkMeta]
