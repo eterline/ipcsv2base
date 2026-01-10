@@ -40,10 +40,10 @@ var (
 			KeyFileSSL: "",
 		},
 		Base: config.Base{
-			CountryCSV: "ip-to-country.csv",
-			AsnCSV:     "ip-to-asn.csv",
+			CountryTSV: []string{},
+			CountryCSV: "",
+			AsnCSV:     "",
 			IPver:      "all",
-			Type:       "all",
 		},
 	}
 )

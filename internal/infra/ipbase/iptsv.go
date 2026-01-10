@@ -95,22 +95,13 @@ func addToSet(set *ipsetdata.IPContainerSet[uint16], line []byte) error {
 		return nil
 	}
 
-	var (
-		startIP = toolkit.BytesToString(rec[0])
-		endIP   = toolkit.BytesToString(rec[1])
-		code    = toolkit.BytesToUint16BE(rec[2])
+	if len(rec[2]) < 2 {
+		return nil
+	}
+
+	return set.AddStartEndStrings(
+		toolkit.BytesToString(rec[0]),
+		toolkit.BytesToString(rec[1]),
+		toolkit.BytesToUint16LE(rec[2]),
 	)
-
-	start, err := netip.ParseAddr(startIP)
-	if err != nil {
-		return err
-	}
-
-	end, err := netip.ParseAddr(endIP)
-	if err != nil {
-		return err
-	}
-
-	set.AddStartEnd(start, end, code)
-	return nil
 }

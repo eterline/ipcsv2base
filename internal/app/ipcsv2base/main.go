@@ -1,6 +1,7 @@
 package ipcsv2base
 
 import (
+	"strings"
 	"time"
 
 	"github.com/eterline/ipcsv2base/internal/config"
@@ -37,43 +38,57 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	// ========================================================
 
 	log.Info("starting IP base initialization")
-	log.Info(
-		"loading CSV files",
-		"ip_version", cfg.Base.IPver,
-		"asn_base", cfg.AsnCSV,
-		"country_base", cfg.CountryCSV,
-	)
 
 	startInit := time.Now()
 
 	// TODO: registry factory later...
-	var lookuper ipbase.MetaLookuper
 
-	// if cfg.Base.Type == "codeonly" {
-	// 	base, err := ipbaseProvide.NewRegistryContryOnlyIP(ctx, cfg.CountryCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
-	// 	if err != nil {
-	// 		log.Error("Failed to prepare IP base", "error", err)
-	// 		root.MustStopApp(1)
-	// 	}
-	// 	log.Info(
-	// 		"ip base loaded successfully",
-	// 		"base_records", base.Size(),
-	// 		"initialization_time_ms", time.Since(startInit).Milliseconds(),
-	// 	)
-	// 	lookuper = base
-	// } else {
-	base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.Base.IPver))
-	if err != nil {
-		log.Error("Failed to prepare IP base", "error", err)
+	type Base interface {
+		ipbase.MetaLookuper
+		Size() int
+	}
+
+	var lookuper Base
+
+	switch {
+	case len(cfg.CountryTSV) > 0:
+		log.Info(
+			"loading CSV files",
+			"tsv_files", strings.Join(cfg.CountryTSV, ", "),
+		)
+
+		base, err := ipbaseProvide.NewRegistryIPTSV(ctx, cfg.CountryTSV...)
+		if err != nil {
+			log.Error("failed to prepare IP base", "error", err)
+			root.MustStopApp(1)
+		}
+		lookuper = base
+
+	case cfg.CountryCSV != "" && cfg.AsnCSV != "":
+		log.Info(
+			"loading CSV files",
+			"ip_version", cfg.Base.IPver,
+			"asn_base", cfg.AsnCSV,
+			"country_base", cfg.CountryCSV,
+		)
+
+		base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.IPver))
+		if err != nil {
+			log.Error("failed to prepare IP base", "error", err)
+			root.MustStopApp(1)
+		}
+		lookuper = base
+
+	default:
+		log.Error("base did not prepared")
 		root.MustStopApp(1)
 	}
+
 	log.Info(
 		"ip base loaded successfully",
-		"base_records", base.Size(),
+		"base_records", lookuper.Size(),
 		"initialization_time_ms", time.Since(startInit).Milliseconds(),
 	)
-	lookuper = base
-	// }
 
 	baseSrvc := ipbase.NewIPBaseService(log, lookuper, &ipbaseProvide.IPbaseCacheMock{})
 	baseHandlers := baseapi.NewBaseAPIHandlerGroup(log, baseSrvc, true)

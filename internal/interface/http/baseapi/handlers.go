@@ -101,7 +101,7 @@ func (h *BaseAPIHandlerGroup) LookupIPHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	dto := domain2IPMetadataDTO(meta, time.Since(startAt))
+	dto := domain2IPMetadataDTO(meta, time.Since(startAt), addr)
 	api.NewResponse().
 		SetCode(http.StatusOK).
 		WrapData(dto).
@@ -152,7 +152,7 @@ func (h *BaseAPIHandlerGroup) LookupSubnetHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	dto := domain2IPMetadataDTO(meta, time.Since(startAt))
+	dto := domain2IPMetadataDTO(meta, time.Since(startAt), pfx.Addr())
 	api.NewResponse().
 		SetCode(http.StatusOK).
 		WrapData(dto).

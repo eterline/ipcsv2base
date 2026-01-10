@@ -1,6 +1,7 @@
 package ipsetdata
 
 import (
+	"fmt"
 	"net/netip"
 	"sort"
 
@@ -53,6 +54,22 @@ func (cset *IPContainerSet[T]) AddStartEnd(start, end netip.Addr, value T) {
 		},
 		data: value,
 	})
+}
+
+// AddStartEndStrings - Adds a CIDR prefix with associated value to the set.
+func (cset *IPContainerSet[T]) AddStartEndStrings(start, end string, value T) error {
+	startAddr, err := netip.ParseAddr(start)
+	if err != nil {
+		return fmt.Errorf("invalid start range addr: %w", err)
+	}
+
+	endAddr, err := netip.ParseAddr(end)
+	if err != nil {
+		return fmt.Errorf("invalid end range addr: %w", err)
+	}
+
+	cset.AddStartEnd(startAddr, endAddr, value)
+	return nil
 }
 
 // AddPrefix - Adds a CIDR prefix with associated value to the set.

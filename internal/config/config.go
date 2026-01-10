@@ -18,6 +18,7 @@ var val *validator.Validate
 
 func init() {
 	val = validator.New()
+	val.RegisterStructValidation(baseStructValidation, Base{})
 }
 
 type (
@@ -33,10 +34,10 @@ type (
 	}
 
 	Base struct {
-		CountryCSV string `arg:"--country-csv" help:"Path to the country CSV file" validate:"filepath"`
-		AsnCSV     string `arg:"--asn-csv" help:"Path to the ASN CSV file" validate:"filepath"`
-		IPver      string `arg:"--ip-ver" help:"IP version in base selector: all|v4|v6" validate:"oneof=all v4 v6"`
-		Type       string `arg:"--base-type" help:"IP base data type: all|codeonly" validate:"oneof=all codeonly"`
+		CountryTSV []string `arg:"--country-tsvs" help:"Path to the country TSV files"`
+		CountryCSV string   `arg:"--country-csv" help:"Path to the country CSV file"`
+		AsnCSV     string   `arg:"--asn-csv" help:"Path to the ASN CSV file"`
+		IPver      string   `arg:"--ip-ver" help:"IP version in base selector: all|v4|v6" validate:"oneof=all v4 v6"`
 	}
 
 	Configuration struct {
