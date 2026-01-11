@@ -76,23 +76,37 @@ func (z *ZapLogger) With(fields ...model.LogField) model.Logger {
 }
 
 func (z *ZapLogger) Debug(msg string, fields ...model.LogField) {
-	z.log.Debug(msg, z.buildZapFields(fields)...)
+	if z.canLog(zap.DebugLevel) {
+		z.log.Debug(msg, z.buildZapFields(fields)...)
+	}
 }
 
 func (z *ZapLogger) Info(msg string, fields ...model.LogField) {
-	z.log.Info(msg, z.buildZapFields(fields)...)
+	if z.canLog(zap.InfoLevel) {
+		z.log.Info(msg, z.buildZapFields(fields)...)
+	}
 }
 
 func (z *ZapLogger) Warn(msg string, fields ...model.LogField) {
-	z.log.Warn(msg, z.buildZapFields(fields)...)
+	if z.canLog(zap.WarnLevel) {
+		z.log.Warn(msg, z.buildZapFields(fields)...)
+	}
 }
 
 func (z *ZapLogger) Error(msg string, fields ...model.LogField) {
-	z.log.Error(msg, z.buildZapFields(fields)...)
+	if z.canLog(zap.ErrorLevel) {
+		z.log.Error(msg, z.buildZapFields(fields)...)
+	}
 }
 
 func (z *ZapLogger) Fatal(msg string, fields ...model.LogField) {
-	z.log.Fatal(msg, z.buildZapFields(fields)...)
+	if z.canLog(zap.FatalLevel) {
+		z.log.Fatal(msg, z.buildZapFields(fields)...)
+	}
+}
+
+func (z *ZapLogger) canLog(lvl zapcore.Level) bool {
+	return z.log.Level().Enabled(lvl)
 }
 
 func (z *ZapLogger) buildZapFields(extra []model.LogField) []zap.Field {
