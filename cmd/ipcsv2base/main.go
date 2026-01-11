@@ -60,7 +60,7 @@ func main() {
 				return err
 			}
 
-			logger, err := log.NewZapLoggerWithConfig(cfg.LogLevel, Flags.IsDev(), cfg.JSONlog, cfg.Colored)
+			logger, err := log.NewZapLoggerWithConfigStdout(cfg.LogLevel, Flags.IsDev(), cfg.JSONlog, cfg.Colored)
 			if err == nil {
 				logapp = logger
 			}
