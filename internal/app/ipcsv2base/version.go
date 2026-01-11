@@ -3,10 +3,16 @@
 // Licensed under the MIT License. See the LICENSE file for details.
 package ipcsv2base
 
+import "github.com/eterline/ipcsv2base/internal/model"
+
 type InitFlags struct {
 	CommitHash string
 	Version    string
 	Repository string
+}
+
+func (inf InitFlags) IsDev() bool {
+	return inf.GetCommitHash() == "dev" || inf.GetVersion() == "dev"
 }
 
 func (inf InitFlags) GetCommitHash() string {
@@ -19,4 +25,12 @@ func (inf InitFlags) GetVersion() string {
 
 func (inf InitFlags) GetRepository() string {
 	return inf.Repository
+}
+
+func (inf InitFlags) FieldsLog() []model.LogField {
+	return []model.LogField{
+		model.FieldString("commit", inf.GetCommitHash()),
+		model.FieldString("version", inf.GetVersion()),
+		model.FieldString("repository", inf.GetRepository()),
+	}
 }

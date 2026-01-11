@@ -12,6 +12,7 @@ import (
 	"github.com/eterline/ipcsv2base/internal/app/ipcsv2base"
 	"github.com/eterline/ipcsv2base/internal/config"
 	"github.com/eterline/ipcsv2base/internal/infra/log"
+	"github.com/eterline/ipcsv2base/internal/model"
 	"github.com/eterline/ipcsv2base/pkg/toolkit"
 )
 
@@ -33,6 +34,7 @@ var (
 		Log: config.Log{
 			LogLevel: "info",
 			JSONlog:  false,
+			Colored:  false,
 		},
 		Server: config.Server{
 			Listen:     ":3000",
@@ -49,21 +51,29 @@ var (
 )
 
 func main() {
+	var logapp model.Logger
+
 	root := toolkit.InitAppStart(
 		func() error {
-			return config.ParseArgs(&cfg)
+			err := config.ParseArgs(&cfg)
+			if err != nil {
+				return err
+			}
+
+			logger, err := log.NewZapLoggerWithConfig(cfg.LogLevel, Flags.IsDev(), cfg.JSONlog, cfg.Colored)
+			if err == nil {
+				logapp = logger
+			}
+			return err
 		},
 	)
 
-	logger := log.NewLogger(cfg.LogLevel, cfg.JSONlog)
-	root.Context = log.WrapLoggerToContext(root.Context, logger)
-
 	if cfg.Profiling != "" {
 		go func() {
-			logger.Info("pprof listening", "listen", cfg.Profiling)
+			logapp.Info("pprof listening", model.FieldString("listen", cfg.Profiling))
 			http.ListenAndServe(cfg.Profiling, nil)
 		}()
 	}
 
-	ipcsv2base.Execute(root, Flags, cfg)
+	ipcsv2base.Execute(root, logapp, Flags, cfg)
 }

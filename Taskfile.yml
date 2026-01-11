@@ -37,7 +37,7 @@ tasks:
     cmds:
       - echo "=== Building Binary ==="
       - |
-        go build -trimpath -ldflags="{{.GO_FLAGS}}" \
+        go build -ldflags="-s -w" \
         -o "./ipcsv2base.exe" \
         -v "./cmd/ipcsv2base/main.go"
       - echo "=== Build Completed ==="

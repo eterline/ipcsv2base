@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/eterline/ipcsv2base/internal/infra/log"
+	"github.com/eterline/ipcsv2base/internal/model"
 )
 
 /*
@@ -23,6 +23,7 @@ type Server struct {
 	srv     *http.Server
 	tlsCfg  *tls.Config
 	timeout time.Duration
+	log     model.Logger
 }
 
 // ====================================================
@@ -54,12 +55,13 @@ func WithDisabledDefaultHttp2Map() ServerOption {
 // ====================================================
 
 // NewServer – creates a new Server with given HTTP handler and options.
-func NewServer(handler http.Handler, opts ...ServerOption) *Server {
+func NewServer(handler http.Handler, log model.Logger, opts ...ServerOption) *Server {
 	s := &Server{
 		srv: &http.Server{
 			Handler: handler,
 		},
 		timeout: 5 * time.Second,
+		log:     log,
 	}
 
 	for _, opt := range opts {
@@ -80,14 +82,19 @@ Run – starts the server on the given address.
 	Listens for context cancellation to shutdown gracefully.
 */
 func (s *Server) Run(ctx context.Context, addr, key, crt string) error {
-	logger := log.MustLoggerFromContext(ctx).With("listen", addr)
-
 	s.srv.Addr = addr
 	tlsEnabled := s.srv.TLSConfig != nil && key != "" && crt != ""
-	logger = logger.With("tls", tlsEnabled)
+
+	logger := s.log.With(
+		model.FieldString("listen", addr),
+		model.Field("tls", tlsEnabled),
+	)
 
 	if tlsEnabled {
-		logger = logger.With("ssl_certificate", crt, "ssl_key", key)
+		logger = logger.With(
+			model.FieldString("ssl_cert", crt),
+			model.FieldString("ssl_key", key),
+		)
 	}
 
 	errCh := make(chan error, 1)
@@ -111,7 +118,7 @@ func (s *Server) Run(ctx context.Context, addr, key, crt string) error {
 		defer cancel()
 
 		if err := s.srv.Shutdown(shCtx); err != nil {
-			logger.Error("shutdown error", "error", err)
+			logger.Error("shutdown error", model.FieldError(err))
 			return err
 		}
 
@@ -123,7 +130,7 @@ func (s *Server) Run(ctx context.Context, addr, key, crt string) error {
 			logger.Info("server closed normally")
 			return nil
 		}
-		logger.Error("server error", "error", err)
+		logger.Error("server error", model.FieldError(err))
 		return err
 	}
 }

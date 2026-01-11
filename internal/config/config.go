@@ -25,6 +25,7 @@ type (
 	Log struct {
 		LogLevel string `arg:"--log-level" help:"Logging level: debug|info|warn|error" validate:"oneof=debug info warn error"`
 		JSONlog  bool   `arg:"--log-json,-j" help:"Set logs to JSON format"`
+		Colored  bool   `arg:"--log-colored" help:"Set logs colored"`
 	}
 
 	Server struct {

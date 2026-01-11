@@ -1,44 +1,32 @@
 package ipcsv2base
 
 import (
-	"strings"
 	"time"
 
 	"github.com/eterline/ipcsv2base/internal/config"
 	ipbaseProvide "github.com/eterline/ipcsv2base/internal/infra/ipbase"
-	"github.com/eterline/ipcsv2base/internal/infra/log"
 	"github.com/eterline/ipcsv2base/internal/interface/http/api"
 	"github.com/eterline/ipcsv2base/internal/interface/http/baseapi"
 	"github.com/eterline/ipcsv2base/internal/interface/http/server"
+	"github.com/eterline/ipcsv2base/internal/model"
 	"github.com/eterline/ipcsv2base/internal/service/ipbase"
 	"github.com/eterline/ipcsv2base/pkg/toolkit"
 	"github.com/go-chi/chi/v5"
 )
 
-func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration) {
+func Execute(root *toolkit.AppStarter, log model.Logger, flags InitFlags, cfg config.Configuration) {
 	ctx := root.Context
-	log := log.MustLoggerFromContext(ctx)
-
-	// ========================================================
-
-	log.Info(
-		"starting app",
-		"commit", flags.GetCommitHash(),
-		"version", flags.GetVersion(),
-		"repository", flags.GetRepository(),
-	)
-
+	log.Info("start app", flags.FieldsLog()...)
 	defer func() {
 		log.Info(
-			"exit from app",
-			"running_time", root.WorkTime(),
+			"exit app",
+			model.Field("running_time", root.WorkTime()),
 		)
 	}()
 
 	// ========================================================
 
-	log.Info("starting IP base initialization")
-
+	log.Info("setup IP base initialization")
 	startInit := time.Now()
 
 	// TODO: registry factory later...
@@ -54,12 +42,12 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	case len(cfg.CountryTSV) > 0:
 		log.Info(
 			"loading CSV files",
-			"tsv_files", strings.Join(cfg.CountryTSV, ", "),
+			model.FieldStringJoin("tsv_files", ", ", cfg.CountryTSV...),
 		)
 
 		base, err := ipbaseProvide.NewRegistryIPTSV(ctx, cfg.CountryTSV...)
 		if err != nil {
-			log.Error("failed to prepare IP base", "error", err)
+			log.Error("failed to prepare IP base", model.FieldError(err))
 			root.MustStopApp(1)
 		}
 		lookuper = base
@@ -67,27 +55,25 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 	case cfg.CountryCSV != "" && cfg.AsnCSV != "":
 		log.Info(
 			"loading CSV files",
-			"ip_version", cfg.Base.IPver,
-			"asn_base", cfg.AsnCSV,
-			"country_base", cfg.CountryCSV,
+			model.FieldString("ip_version", cfg.Base.IPver),
+			model.FieldString("asn_base", cfg.AsnCSV),
+			model.FieldString("country_base", cfg.CountryCSV),
 		)
 
 		base, err := ipbaseProvide.NewRegistryIP(ctx, cfg.CountryCSV, cfg.AsnCSV, ipbaseProvide.IPVersionStr(cfg.IPver))
 		if err != nil {
-			log.Error("failed to prepare IP base", "error", err)
-			root.MustStopApp(1)
+			log.Fatal("failed to prepare IP base", model.FieldError(err))
 		}
 		lookuper = base
 
 	default:
-		log.Error("base did not prepared")
-		root.MustStopApp(1)
+		log.Fatal("base did not prepared")
 	}
 
 	log.Info(
 		"ip base loaded successfully",
-		"base_records", lookuper.Size(),
-		"initialization_time_ms", time.Since(startInit).Milliseconds(),
+		model.Field("base_records", lookuper.Size()),
+		model.Field("initialization_time_ms", time.Since(startInit).Milliseconds()),
 	)
 
 	baseSrvc := ipbase.NewIPBaseService(log, lookuper, &ipbaseProvide.IPbaseCacheMock{})
@@ -112,7 +98,7 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 
 	{
 		srv := server.NewServer(
-			rootMux,
+			rootMux, log,
 			server.WithTLS(server.NewServerTlsConfig()),
 			server.WithDisabledDefaultHttp2Map(),
 		)
@@ -120,7 +106,7 @@ func Execute(root *toolkit.AppStarter, flags InitFlags, cfg config.Configuration
 		root.WrapWorker(func() {
 			err := srv.Run(ctx, cfg.Listen, cfg.KeyFileSSL, cfg.CrtFileSSL)
 			if err != nil {
-				log.Error("server run error", "error", err)
+				log.Error("server run error", model.FieldError(err))
 				root.StopApp()
 			}
 		})

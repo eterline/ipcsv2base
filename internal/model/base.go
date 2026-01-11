@@ -43,6 +43,10 @@ func (t NetworkType) String() string {
 	}
 }
 
+func (t NetworkType) FieldLog() LogField {
+	return FieldStringer("network_type", t)
+}
+
 type (
 	IPMetadata struct {
 		Type    NetworkType
@@ -65,3 +69,21 @@ type (
 		Domain      string
 	}
 )
+
+func (g IPGeo) FieldsLog() []LogField {
+	return []LogField{
+		FieldStringer("continent_code", g.ContinentCode),
+		FieldStringer("country_code", g.CountryCode),
+		FieldString("country_name", g.CountryName),
+	}
+}
+
+func (as IPAS) FieldsLog() []LogField {
+	return []LogField{
+		Field("as_number", as.ASN),
+		FieldStringer("as_country_code", as.CountryCode),
+		FieldString("as_name", as.Name),
+		FieldString("as_org", as.Org),
+		FieldString("as_domain", as.Domain),
+	}
+}

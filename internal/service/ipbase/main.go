@@ -3,7 +3,6 @@ package ipbase
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/netip"
 
 	"github.com/eterline/ipcsv2base/internal/model"
@@ -33,7 +32,7 @@ It classifies network type, handles cache hits, and delegates lookups to MetaLoo
 type IPBaseService struct {
 	lookup MetaLookuper
 	cache  MetaCache
-	log    *slog.Logger
+	log    model.Logger
 }
 
 /*
@@ -45,7 +44,7 @@ Parameters:
   - c: cache implementation
 */
 func NewIPBaseService(
-	log *slog.Logger,
+	log model.Logger,
 	l MetaLookuper,
 	c MetaCache,
 ) *IPBaseService {
@@ -67,16 +66,12 @@ Lookup flow:
  5. Fallback to primary lookuper.
  6. Save result to cache asynchronously.
 */
-func (b *IPBaseService) LookupIP(
-	ctx context.Context,
-	addr netip.Addr,
-) (*model.IPMetadata, error) {
+func (b *IPBaseService) LookupIP(ctx context.Context, addr netip.Addr) (*model.IPMetadata, error) {
 
 	nt, pfx := NetworkTypeFromAddrWithSubnet(addr)
-
 	log := b.log.With(
-		"ip", addr.String(),
-		"network_type", nt.String(),
+		model.FieldStringer("ip", addr),
+		model.FieldStringer("network_type", nt),
 	)
 
 	switch nt {
@@ -100,7 +95,7 @@ func (b *IPBaseService) LookupIP(
 	// Primary lookup
 	meta, err := b.lookup.LookupIP(ctx, addr)
 	if err != nil {
-		log.Error("lookup failed", "error", err)
+		log.Error("lookup failed", model.FieldError(err))
 		return nil, err
 	}
 
@@ -118,9 +113,6 @@ func (b *IPBaseService) LookupIP(
 LookupPrefix - Performs metadata lookup for a network prefix.
 Currently resolves metadata based on the prefix address.
 */
-func (b *IPBaseService) LookupPrefix(
-	ctx context.Context,
-	pfx netip.Prefix,
-) (*model.IPMetadata, error) {
+func (b *IPBaseService) LookupPrefix(ctx context.Context, pfx netip.Prefix) (*model.IPMetadata, error) {
 	return b.LookupIP(ctx, pfx.Addr())
 }

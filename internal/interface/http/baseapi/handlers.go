@@ -3,7 +3,6 @@ package baseapi
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -22,16 +21,12 @@ type Lookuper interface {
 
 type BaseAPIHandlerGroup struct {
 	lookup   Lookuper
-	log      *slog.Logger
+	log      model.Logger
 	ipLookup *security.IpExtractor
 }
 
 // NewBaseAPIHandlerGroup - Creates a new API handler group for IP base lookups.
-func NewBaseAPIHandlerGroup(
-	log *slog.Logger,
-	l Lookuper,
-	lookupHeadersIp bool,
-) *BaseAPIHandlerGroup {
+func NewBaseAPIHandlerGroup(log model.Logger, l Lookuper, lookupHeadersIp bool) *BaseAPIHandlerGroup {
 	return &BaseAPIHandlerGroup{
 		lookup:   l,
 		log:      log,
@@ -88,12 +83,12 @@ func (h *BaseAPIHandlerGroup) LookupIPHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Prepare structured log
-	log := h.log.With("ip", addr.String())
+	log := h.log.With(model.FieldStringer("ip", addr))
 
 	// Perform lookup
 	meta, err := h.lookup.LookupIP(ctx, addr)
 	if err != nil {
-		log.Error("ip lookup failed", "error", err)
+		log.Error("ip lookup failed", model.FieldError(err))
 		api.NewResponse().
 			SetCode(http.StatusInternalServerError).
 			SetMessage("lookup failed").
@@ -127,13 +122,13 @@ func (h *BaseAPIHandlerGroup) LookupSubnetHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	log := h.log.With("prefix", rawNet)
+	log := h.log.With(model.FieldString("prefix", rawNet))
 
 	startAt := time.Now()
 
 	pfx, err := netip.ParsePrefix(rawNet)
 	if err != nil {
-		log.Debug("invalid network prefix", "error", err)
+		log.Debug("invalid network prefix", model.FieldError(err))
 		api.NewResponse().
 			SetCode(http.StatusInternalServerError).
 			SetMessage("invalid subnet").
@@ -144,7 +139,7 @@ func (h *BaseAPIHandlerGroup) LookupSubnetHandler(w http.ResponseWriter, r *http
 
 	meta, err := h.lookup.LookupPrefix(ctx, pfx)
 	if err != nil {
-		log.Error("prefix lookup failed", "error", err)
+		log.Error("prefix lookup failed", model.FieldError(err))
 		api.NewResponse().
 			SetCode(http.StatusInternalServerError).
 			SetMessage("lookup failed").
